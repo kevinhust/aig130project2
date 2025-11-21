@@ -50,8 +50,8 @@ COPY --chown=appuser:appuser src/ ./src/
 
 # Copy data file (optional - for local testing only)
 # In production, data is loaded from S3 using USE_S3=true environment variable
-# Comment out the line below when deploying to AWS (data loaded from S3)
-COPY --chown=appuser:appuser data/btc_1h_data_2018_to_2025.csv ./data/
+# For local testing: uncomment the line below
+# COPY --chown=appuser:appuser data/btc_1h_data_2018_to_2025.csv ./data/
 
 # Switch to non-root user
 USER appuser
