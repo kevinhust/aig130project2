@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  bitcoin-predictor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bitcoin-ml-pipeline
+    image: bitcoin-predictor:latest
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MPLBACKEND=Agg
+
+    # Mount volumes for persistent data
+    volumes:
+      # Input data (optional - comment out to use data in image)
+      - ./data:/app/data:ro
+
+      # Output directories - persist results on host
+      - ./models:/app/models
+      - ./results:/app/results
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+    # Command override (optional)
+    command: ["python", "main.py", "--mode", "train"]
+
+    # Restart policy
+    restart: "no"
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Interactive mode for debugging/development
+  bitcoin-predictor-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bitcoin-ml-dev
+    image: bitcoin-predictor:latest
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MPLBACKEND=Agg
+
+    volumes:
+      - ./data:/app/data:ro
+      - ./models:/app/models
+      - ./results:/app/results
+      - ./src:/app/src  # Mount source for development
+
+    command: ["/bin/bash"]
+    stdin_open: true
+    tty: true
+
+    restart: "no"
+
+    profiles:
+      - dev  # Only start with: docker-compose --profile dev up

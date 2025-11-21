@@ -1,0 +1,135 @@
+name: Deploy ML Pipeline to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual triggering
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: aig130-p2-ml-pipeline-ecr
+  ECS_CLUSTER: aig130-p2-ml-cluster
+  ECS_TASK_DEFINITION: aig130-p2-ml-task
+  CONTAINER_NAME: ml-pipeline-container
+  S3_BUCKET: aig130-p2-ml-data-bucket
+  S3_DATA_KEY: data/btc_1h_data_2018_to_2025.csv
+
+jobs:
+  deploy:
+    name: Build and Deploy to AWS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload training data to S3
+        run: |
+          # Check if file exists in S3
+          if aws s3 ls s3://${{ env.S3_BUCKET }}/${{ env.S3_DATA_KEY }} 2>&1 | grep -q 'PRE\|csv'; then
+            echo "Data file already exists in S3, skipping upload"
+          else
+            echo "Uploading data file to S3..."
+            aws s3 cp AIG130_Project2_Docker/data/btc_1h_data_2018_to_2025.csv \
+              s3://${{ env.S3_BUCKET }}/${{ env.S3_DATA_KEY }}
+            echo "Data file uploaded successfully"
+          fi
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build Docker image
+          cd AIG130_Project2_Docker
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Push to ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Output image URI for next steps
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query 'taskDefinition' \
+            --region ${{ env.AWS_REGION }} > task-definition.json
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: false
+
+      - name: Run ECS task for ML pipeline execution
+        id: run-task
+        run: |
+          # Get VPC configuration
+          SUBNETS=$(aws ec2 describe-subnets \
+            --filters "Name=default-for-az,Values=true" \
+            --query 'Subnets[*].SubnetId' \
+            --output text \
+            --region ${{ env.AWS_REGION }} | tr '\t' ',')
+
+          SECURITY_GROUP=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=aig130-p2-ml-sg" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+
+          # Run the task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Task ARN: $TASK_ARN"
+          echo "task-arn=$TASK_ARN" >> $GITHUB_OUTPUT
+
+          # Wait for task to start
+          echo "Waiting for task to start..."
+          aws ecs wait tasks-running \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN \
+            --region ${{ env.AWS_REGION }} || true
+
+      - name: Display task execution status
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Task ARN: ${{ steps.run-task.outputs.task-arn }}"
+          echo ""
+          echo "To view logs, run:"
+          echo "aws logs tail /ecs/${{ env.ECS_TASK_DEFINITION }} --follow --region ${{ env.AWS_REGION }}"
+          echo ""
+          echo "To check task status, run:"
+          echo "aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks ${{ steps.run-task.outputs.task-arn }} --region ${{ env.AWS_REGION }}"
