@@ -127,7 +127,7 @@ resource "aws_iam_role" "ecs_task_role" {
 # Policy for S3 access
 resource "aws_iam_policy" "s3_access_policy" {
   name        = "${var.project_name}-s3-access-policy"
-  description = "Policy for ECS tasks to read from S3 data bucket"
+  description = "Policy for ECS tasks to read and write to S3 data bucket"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -136,6 +136,7 @@ resource "aws_iam_policy" "s3_access_policy" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
+          "s3:PutObject",
           "s3:ListBucket"
         ]
         Resource = [
