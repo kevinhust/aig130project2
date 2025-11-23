@@ -92,7 +92,7 @@ jobs:
         run: |
           # Get VPC configuration
           SUBNETS=$(aws ec2 describe-subnets \
-            --filters "Name=default-for-az,Values=true" \
+            --filters "Name=tag:Name,Values=aig130-p2-public-subnet-*" \
             --query 'Subnets[*].SubnetId' \
             --output text \
             --region ${{ env.AWS_REGION }} | tr '\t' ',')
