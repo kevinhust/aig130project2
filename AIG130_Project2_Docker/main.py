@@ -163,6 +163,27 @@ def main():
     logger.info(f"Plots saved to: {config.PLOTS_DIR}")
     logger.info("="*70)
 
+    # Upload results to S3 if running in AWS environment
+    if config.USE_S3:
+        logger.info("")
+        try:
+            from src.s3_uploader import upload_results_to_s3
+            import os
+
+            # Get run ID from environment (GitHub commit SHA if available)
+            run_id = os.environ.get('GITHUB_SHA', None)
+
+            upload_results_to_s3(
+                results_dir=config.RESULTS_DIR,
+                models_dir=config.MODELS_DIR,
+                plots_dir=config.PLOTS_DIR,
+                s3_bucket=config.S3_BUCKET,
+                run_id=run_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to upload results to S3: {e}", exc_info=True)
+            logger.warning("Pipeline completed but results upload failed")
+
 
 if __name__ == "__main__":
     try:
