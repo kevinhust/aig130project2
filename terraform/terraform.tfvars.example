@@ -1,0 +1,33 @@
+# Terraform Variables Configuration Example
+# Copy this file to terraform.tfvars and customize as needed
+
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "prod"
+
+# Project Configuration
+project_name = "aig130-p2"
+
+# S3 Configuration (existing bucket)
+s3_bucket_name = "aig130-p2-ml-data-bucket"
+s3_data_key    = "data/btc_1h_data_2018_to_2025.csv"
+
+# ECR Configuration
+ecr_repository_name = "aig130-p2-ml-pipeline-ecr"
+
+# ECS Configuration
+ecs_cluster_name         = "aig130-p2-ml-cluster"
+ecs_task_definition_name = "aig130-p2-ml-task"
+container_name           = "ml-pipeline-container"
+
+# Task Resources
+# CPU options: 256, 512, 1024, 2048, 4096
+# Memory options depend on CPU (see AWS docs)
+task_cpu    = "1024"  # 1 vCPU
+task_memory = "2048"  # 2 GB
+
+# CloudWatch Configuration
+log_retention_days = 7  # Days to keep logs (1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, etc.)
+
+# GitHub Actions Configuration
+create_github_actions_user = true  # Set to false if you don't need CI/CD user
