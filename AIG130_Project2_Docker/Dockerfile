@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 FROM python:3.10-slim
 
 # Add metadata labels
-LABEL maintainer="your-email@example.com"
+LABEL maintainer="kevinhust@gmail.com"
 LABEL description="Bitcoin Price Prediction ML Pipeline"
 LABEL version="1.0"
 
